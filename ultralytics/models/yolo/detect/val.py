@@ -175,23 +175,38 @@ class DetectionValidator(BaseValidator):
             preds (list[dict[str, torch.Tensor]]): List of predictions from the model.
             batch (dict[str, Any]): Batch data containing ground truth.
         """
+        score_labels = self.args.score_labels and self.args.task == "detect"
+        if score_labels:
+            from ultralytics.utils.analysis import _label_issue_scores
         for si, pred in enumerate(preds):
             self.seen += 1
             pbatch = self._prepare_batch(si, batch)
             predn = self._prepare_pred(pred)
+            im_name = str(Path(pbatch["im_file"]).absolute())
 
             cls = pbatch["cls"].cpu().numpy()
             no_pred = predn["cls"].shape[0] == 0
+            pred_cls_np = np.zeros(0) if no_pred else predn["cls"].cpu().numpy()
+            pred_conf_np = np.zeros(0) if no_pred else predn["conf"].cpu().numpy()
             self.metrics.update_stats(
                 {
                     **self._process_batch(predn, pbatch),
                     "target_cls": cls,
                     "target_img": np.unique(cls),
-                    "conf": np.zeros(0) if no_pred else predn["conf"].cpu().numpy(),
-                    "pred_cls": np.zeros(0) if no_pred else predn["cls"].cpu().numpy(),
-                    "im_name": str(Path(pbatch["im_file"]).absolute()),
+                    "conf": pred_conf_np,
+                    "pred_cls": pred_cls_np,
+                    "im_name": im_name,
                 }
             )
+            if score_labels:
+                self.metrics.box.image_metrics[im_name].update(
+                    _label_issue_scores(
+                        box_iou(pbatch["bboxes"], predn["bboxes"]).cpu().numpy(),
+                        pred_cls_np,
+                        pred_conf_np,
+                        cls,
+                    )
+                )
             # Evaluate
             if self.args.plots:
                 self.confusion_matrix.process_batch(predn, pbatch, conf=self.confusion_matrix_conf)
