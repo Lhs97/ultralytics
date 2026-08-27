@@ -540,7 +540,7 @@ class YOLOE(Model):
             self.predictor.setup_model(model=self.model, verbose=self.predictor.args.verbose)
 
             if refer_image is None and source is not None:
-                dataset = load_inference_source(source)
+                dataset = load_inference_source(source, preprocess_tensor=kwargs.get("preprocess_tensor", False))
                 if dataset.mode in {"video", "stream"}:
                     # NOTE: set the first frame as refer image for videos/streams inference
                     refer_image = next(iter(dataset))[1][0]
