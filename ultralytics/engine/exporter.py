@@ -18,6 +18,7 @@ MNN                     | `mnn`                     | yolo26n.mnn
 NCNN                    | `ncnn`                    | yolo26n_ncnn_model/
 IMX                     | `imx`                     | yolo26n_imx_model/
 RKNN                    | `rknn`                    | yolo26n_rknn_model/
+RDK                     | `rdk`                     | yolo26n_rdk_model/
 ExecuTorch              | `executorch`              | yolo26n_executorch_model/
 Axelera AI              | `axelera`                 | yolo26n_axelera_model/
 DEEPX                   | `deepx`                   | yolo26n_deepx_model/
@@ -215,6 +216,7 @@ def export_formats():
             ["batch", "name", "quantize", "opset", "simplify", "data", "fraction"],
             "isolated-rknn",
         ],
+        ["RDK", "rdk", "_rdk_model", False, False, ["data"], "base"],
         ["ExecuTorch", "executorch", "_executorch_model", True, False, ["batch"], "executorch"],
         [
             "Axelera AI",
@@ -526,6 +528,7 @@ class Exporter:
         export_pb: Export model to TensorFlow GraphDef format.
         export_edgetpu: Export model to Edge TPU format.
         export_rknn: Export model to RKNN format.
+        export_rdk: Export model to RDK format.
         export_imx: Export model to IMX format.
         export_executorch: Export model to ExecuTorch format.
         export_axelera: Export model to Axelera format.
@@ -1526,6 +1529,22 @@ class Exporter:
         finally:
             if self.args.quantize == 8:  # INT8 graphs hold normalized coordinates, so they are not reusable
                 Path(f_onnx).unlink(missing_ok=True)
+
+    @try_export
+    def export_rdk(self, prefix=colorstr("RDK:")):  # noqa: B008
+        """Export YOLO model to RDK format."""
+        LOGGER.info(f"\n{prefix} starting export...")
+        from ultralytics.utils.export.rdk import apply_rdk_patches, export_rdk, restore_rdk_patches
+
+        patches = apply_rdk_patches(self.model)
+        old_opset = self.args.opset
+        try:
+            self.args.opset = 11
+            onnx_path = self.export_onnx()
+            return export_rdk(args=self.args, onnx_path=onnx_path, metadata=self.metadata, prefix=prefix)
+        finally:
+            self.args.opset = old_opset
+            restore_rdk_patches(patches)
 
     @try_export
     def export_ascend(self, prefix=colorstr("Ascend:")):  # noqa: B008
